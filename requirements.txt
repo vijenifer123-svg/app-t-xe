@@ -6,3 +6,4 @@ polyline
 numpy
 scikit-fuzzy
 geocoder
+scipy
