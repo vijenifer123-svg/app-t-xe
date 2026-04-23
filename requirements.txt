@@ -4,6 +4,7 @@ streamlit-folium
 requests
 polyline
 numpy
+scipy
+networkx
 scikit-fuzzy
 geocoder
-scipy
