@@ -9,7 +9,8 @@ from skfuzzy import control as ctrl
 import time
 import random
 import geocoder
-from datetime import datetime  
+# [CHỈNH SỬA 1]: Thêm timedelta để xử lý múi giờ Việt Nam
+from datetime import datetime, timedelta  
 from streamlit_geolocation import streamlit_geolocation 
 
 # Khởi tạo Session State để lưu tọa độ khi click trên bản đồ
@@ -19,7 +20,6 @@ if 'dropoff_coord' not in st.session_state:
     st.session_state.dropoff_coord = None
 if 'map_mode' not in st.session_state:
     st.session_state.map_mode = "Điểm đón"
-# [CHỈNH SỬA]: Thêm cờ kiểm soát gán tự động GPS
 if 'gps_auto_assigned' not in st.session_state:
     st.session_state.gps_auto_assigned = False
 
@@ -257,15 +257,12 @@ with col1:
         if gps_location and gps_location.get('latitude') is not None:
             st.session_state.user_gps = (gps_location['latitude'], gps_location['longitude'])
             
-            # [CHỈNH SỬA LỖI Ở ĐÂY]: Chỉ tự động gán tọa độ 1 LẦN DUY NHẤT. 
-            # Nếu người dùng đã bấm Xóa, app không tự động ép lại tọa độ nữa.
             if not st.session_state.gps_auto_assigned:
                 st.session_state.pickup_coord = st.session_state.user_gps
                 st.session_state.gps_auto_assigned = True
             
             st.success("✅ Đã lấy được tọa độ GPS!")
 
-            # Bổ sung một nút nhỏ để người dùng chủ động chọn lại vị trí GPS nếu đã lỡ xóa
             if st.session_state.pickup_coord != st.session_state.user_gps:
                 if st.button("📍 Dùng lại vị trí GPS này làm Điểm Đón"):
                     st.session_state.pickup_coord = st.session_state.user_gps
@@ -276,7 +273,6 @@ with col1:
         if st.button("🔄 Xóa điểm đã chọn trên bản đồ"):
             st.session_state.pickup_coord = None
             st.session_state.dropoff_coord = None
-            # [CHỈNH SỬA]: Không reset cờ gps_auto_assigned ở đây để tránh bị gán lại GPS ngay lập tức
             st.rerun()
 
         st.markdown("**3. Hoặc tìm bằng văn bản:**") 
@@ -296,7 +292,8 @@ with col1:
     st.caption("📡 **System Status**: Đa luồng (Text & Map Click) | 🟢 GPS: Sẵn sàng")
 
 with col2:
-    now = datetime.now()
+    # [CHỈNH SỬA 2]: Lấy thời gian UTC cộng thêm 7 tiếng (Giờ Việt Nam)
+    now = datetime.utcnow() + timedelta(hours=7)
     current_time_val = now.hour + (now.minute / 60.0)
 
     center_lat, center_lon = 10.7769, 106.7009
@@ -332,6 +329,13 @@ with col2:
                         final_price = base_fare + (dist_km * price_per_km * multiplier)
                         
                         folium.PolyLine(route_coords, color="#1E3A8A", weight=5, opacity=0.8).add_to(m)
+                        
+                        # [CHỈNH SỬA 3]: Bổ sung vẽ marker nếu người dùng lấy tọa độ bằng cách gõ chữ
+                        if st.session_state.pickup_coord is None:
+                            folium.Marker(coord_A, popup="Điểm đón", icon=folium.Icon(color="green", icon="info-sign")).add_to(m)
+                        if st.session_state.dropoff_coord is None:
+                            folium.Marker(coord_B, popup="Điểm đến", icon=folium.Icon(color="red", icon="flag")).add_to(m)
+
                         m.location = [(coord_A[0] + coord_B[0]) / 2, (coord_A[1] + coord_B[1]) / 2]
                         
                         route_success = True
