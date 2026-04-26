@@ -228,7 +228,7 @@ def get_realtime_demand(dist_km, time_min):
 # ==========================================
 # MODULE 3: GIAO DIỆN APP ĐƯỢC REDESIGN
 # ==========================================
-st.set_page_config(page_title="Smart Dispatch App", page_icon="🚖", layout="wide")
+st.set_page_config(page_title="VHQ 3I FARE", page_icon="🚖", layout="wide")
 
 st.markdown("""
     <style>
