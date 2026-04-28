@@ -9,11 +9,12 @@ from skfuzzy import control as ctrl
 import time
 import random
 import geocoder
-# [CHỈNH SỬA 1]: Thêm timedelta để xử lý múi giờ Việt Nam
 from datetime import datetime, timedelta  
 from streamlit_geolocation import streamlit_geolocation 
 
-# Khởi tạo Session State để lưu tọa độ khi click trên bản đồ
+# ==========================================
+# KHỞI TẠO SESSION STATE
+# ==========================================
 if 'pickup_coord' not in st.session_state:
     st.session_state.pickup_coord = None
 if 'dropoff_coord' not in st.session_state:
@@ -22,9 +23,11 @@ if 'map_mode' not in st.session_state:
     st.session_state.map_mode = "Điểm đón"
 if 'gps_auto_assigned' not in st.session_state:
     st.session_state.gps_auto_assigned = False
+if 'trip_history' not in st.session_state:
+    st.session_state.trip_history = []
 
 # ==========================================
-# MODULE 1 & 2: LOGIC XỬ LÝ
+# MODULE 1 & 2: LOGIC XỬ LÝ 
 # ==========================================
 def calculate_price_multiplier(weather_val, demand_val, distance_val, time_val):
     weather = ctrl.Antecedent(np.arange(0, 10.1, 0.1), 'weather')       
@@ -162,10 +165,9 @@ def calculate_price_multiplier(weather_val, demand_val, distance_val, time_val):
 
 def get_coordinates(address, ten_diem="Địa chỉ"):
     if address.strip().lower() in ["vị trí của bạn", ""]:
-        # Trả về tọa độ GPS thực tế nếu đã lấy được, nếu chưa thì dùng mặc định
         if 'user_gps' in st.session_state and st.session_state.user_gps is not None:
             return st.session_state.user_gps
-        return (10.7769, 106.7009) # Mặc định dự phòng
+        return (10.7769, 106.7009) 
     
     search_text = address + ", Ho Chi Minh City, Vietnam"
     
@@ -196,6 +198,19 @@ def get_route_osrm(point_a, point_b):
     except: pass
     return None, None, None
 
+
+def get_address_from_coords(coord):
+    try:
+        g = geocoder.arcgis([coord[0], coord[1]], method='reverse')
+        if g.ok and g.address:
+            addr = g.address.replace(", VNM", "").replace(", Vietnam", "").replace(", Hồ Chí Minh", "")
+            parts = addr.split(",")
+            if len(parts) > 2:
+                addr = ", ".join([p.strip() for p in parts[:2]]) # Chỉ giữ 2 thành phần đầu
+            return addr.strip()
+    except: pass
+    return f"Tọa độ: {coord[0]:.4f}, {coord[1]:.4f}"
+
 def get_realtime_weather(lat, lon):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
@@ -225,11 +240,13 @@ def get_realtime_demand(dist_km, time_min):
     else: 
         return round(random.uniform(9.0, 10.0), 1)
 
+
 # ==========================================
 # MODULE 3: GIAO DIỆN APP ĐƯỢC REDESIGN
 # ==========================================
 st.set_page_config(page_title="VHQ 3I FARE", page_icon="🚖", layout="wide")
 
+# CSS Tùy chỉnh
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -249,6 +266,29 @@ st.markdown("<p style='text-align: center; color: #6B7280; margin-bottom: 30px;'
 col1, col2 = st.columns([1, 2.5], gap="large")
 
 with col1:
+    with st.expander("📜 Lịch sử chuyến đi (Nhấn để mở/đóng)", expanded=False):
+        if len(st.session_state.trip_history) == 0:
+            st.info("Chưa có chuyến đi nào được lưu.")
+        else:
+            for idx, trip in enumerate(st.session_state.trip_history):
+                # Hiển thị nút click thu gọn
+                p_short = trip['pickup'] if len(trip['pickup']) <= 25 else trip['pickup'][:22] + "..."
+                d_short = trip['dropoff'] if len(trip['dropoff']) <= 25 else trip['dropoff'][:22] + "..."
+                
+                # Nút nhấn gọn gàng với mũi tên
+                if st.button(f"🗺️ {p_short} ➡️ {d_short}", key=f"hist_{idx}", use_container_width=True, help=f"Đón: {trip['pickup']}\nĐến: {trip['dropoff']}"):
+                    st.session_state.pickup_coord = trip['pickup_coord']
+                    st.session_state.dropoff_coord = trip['dropoff_coord']
+                    st.rerun()
+                
+                # Cước phí và thông tin nằm nhỏ ngay bên dưới
+                st.caption(f"🕒 {trip['time']} | 🛣️ {trip['distance']} | 💵 **{trip['price']}**")
+                st.markdown("---")
+                    
+            if st.button("🗑️ Xóa toàn bộ lịch sử", use_container_width=True, type="secondary"):
+                st.session_state.trip_history = []
+                st.rerun()
+
     st.markdown("### 📍 Thông tin chuyến đi")
     with st.container(border=True):
         
@@ -261,7 +301,6 @@ with col1:
                 st.session_state.pickup_coord = st.session_state.user_gps
                 st.session_state.gps_auto_assigned = True
             
-            st.success("✅ Đã lấy được tọa độ GPS!")
 
             if st.session_state.pickup_coord != st.session_state.user_gps:
                 if st.button("📍 Dùng lại vị trí GPS này làm Điểm Đón"):
@@ -277,12 +316,7 @@ with col1:
 
         st.markdown("**3. Hoặc tìm bằng văn bản:**") 
         pickup_address = st.text_input("🟢 Điểm đón", value="Vị trí của bạn", disabled=(st.session_state.pickup_coord is not None))
-        if st.session_state.pickup_coord:
-            st.success(f"Đã ghim Điểm Đón: {st.session_state.pickup_coord[0]:.4f}, {st.session_state.pickup_coord[1]:.4f}")
-
         dropoff_address = st.text_input("🔴 Điểm đến", placeholder="Ví dụ: Landmark 81...", disabled=(st.session_state.dropoff_coord is not None))
-        if st.session_state.dropoff_coord:
-            st.success(f"Đã ghim Điểm Đến: {st.session_state.dropoff_coord[0]:.4f}, {st.session_state.dropoff_coord[1]:.4f}")
 
         car_type = st.selectbox("🚗 Loại xe", ["Xe 4 Chỗ (Tiết kiệm)", "Xe 7 Chỗ (Rộng rãi)"])
         st.markdown("<br>", unsafe_allow_html=True)
@@ -292,12 +326,11 @@ with col1:
     st.caption("📡 **System Status**: Đa luồng (Text & Map Click) | 🟢 GPS: Sẵn sàng")
 
 with col2:
-    # [CHỈNH SỬA 2]: Lấy thời gian UTC cộng thêm 7 tiếng (Giờ Việt Nam)
     now = datetime.utcnow() + timedelta(hours=7)
     current_time_val = now.hour + (now.minute / 60.0)
 
     center_lat, center_lon = 10.7769, 106.7009
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles="http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}",attr="Google Maps") 
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=14, tiles="http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}",attr="Google Maps") 
     m.add_child(folium.LatLngPopup()) 
 
     if st.session_state.pickup_coord:
@@ -311,7 +344,7 @@ with col2:
         if dropoff_address == "" and st.session_state.dropoff_coord is None:
             st.warning("⚠️ Vui lòng nhập điểm đến hoặc chọn trên bản đồ!")
         else:
-            with st.spinner('🔄 Hệ thống đang tính toán lộ trình và thu thập dữ liệu thời tiết thực tế...'):
+            with st.spinner('🔄 Hệ thống đang tính toán lộ trình và thu thập dữ liệu thời tiết/địa chỉ...'):
                 coord_A = st.session_state.pickup_coord if st.session_state.pickup_coord else get_coordinates(pickup_address, "Điểm Đón")
                 coord_B = st.session_state.dropoff_coord if st.session_state.dropoff_coord else get_coordinates(dropoff_address, "Điểm Đến")
                 
@@ -324,26 +357,59 @@ with col2:
                         
                         multiplier = calculate_price_multiplier(auto_weather, auto_demand, dist_km, current_time_val)
                         
-                        base_fare = 15000 if "4" in car_type else 20000
-                        price_per_km = 12000 if "4" in car_type else 16000
-                        final_price = base_fare + (dist_km * price_per_km * multiplier)
+                        if "4" in car_type:
+                            base_fare = 15000  
+                            price_per_km = 15000  
+                        else:
+                            base_fare = 20000  
+                            price_per_km = 19000  
+
+                        if dist_km <= 1.0:
+                            final_price = base_fare * multiplier
+                        else:
+                            final_price = (base_fare + (dist_km - 1.0) * price_per_km) * multiplier
                         
                         folium.PolyLine(route_coords, color="#1E3A8A", weight=5, opacity=0.8).add_to(m)
                         
-                        # [CHỈNH SỬA 3]: Bổ sung vẽ marker nếu người dùng lấy tọa độ bằng cách gõ chữ
                         if st.session_state.pickup_coord is None:
                             folium.Marker(coord_A, popup="Điểm đón", icon=folium.Icon(color="green", icon="info-sign")).add_to(m)
                         if st.session_state.dropoff_coord is None:
                             folium.Marker(coord_B, popup="Điểm đến", icon=folium.Icon(color="red", icon="flag")).add_to(m)
 
+                        for _ in range(random.randint(2, 5)):
+                            lat_offset = random.uniform(-0.008, 0.008)
+                            lng_offset = random.uniform(-0.008, 0.008)
+                            folium.Marker(
+                                [coord_A[0] + lat_offset, coord_A[1] + lng_offset],
+                                icon=folium.Icon(color="blue", icon="car", prefix='fa')
+                            ).add_to(m)
+
                         m.location = [(coord_A[0] + coord_B[0]) / 2, (coord_A[1] + coord_B[1]) / 2]
                         
                         route_success = True
+
+                    
+                        display_pickup = get_address_from_coords(coord_A)
+                        display_dropoff = get_address_from_coords(coord_B)
+
+                        trip_record = {
+                            "time": now.strftime('%d/%m/%Y %H:%M'),
+                            "pickup": display_pickup,
+                            "dropoff": display_dropoff,
+                            "distance": f"{dist_km:.2f} km",
+                            "price": f"{final_price:,.0f} đ",
+                            "pickup_coord": coord_A,   
+                            "dropoff_coord": coord_B
+                        }
+                        
+                        st.session_state.trip_history.insert(0, trip_record)
+                        
                     else:
                         st.error("❌ Máy chủ OSRM không thể vẽ đường. Vui lòng thử vị trí khác sát đường giao thông hơn!")
                         route_success = False
 
-    map_data = st_folium(m, width=800, height=350, returned_objects=["last_clicked"], key="main_map")
+    # Hiển thị Map
+    map_data = st_folium(m, width=800, height=450, returned_objects=["last_clicked"], key="main_map")
 
     if map_data and map_data.get("last_clicked"):
         lat = map_data["last_clicked"]["lat"]
@@ -380,4 +446,4 @@ with col2:
         for percent_complete in range(100):
             time.sleep(0.01) 
             my_bar.progress(percent_complete + 1, text=f"Đang di chuyển: Khớp lộ trình {percent_complete + 1}%")
-        st.info("🎉 Hành trình hoàn tất. Cảm ơn bạn đã sử dụng dịch vụ!")
+        st.info("🎉 Hành trình hoàn tất. Dữ liệu đã được lưu gọn gàng vào Lịch sử. Cảm ơn bạn đã sử dụng dịch vụ!")
