@@ -330,7 +330,7 @@ with col2:
     current_time_val = now.hour + (now.minute / 60.0)
 
     center_lat, center_lon = 10.7769, 106.7009
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=14, tiles="http://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}",attr="Google Maps") 
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=14, tiles="https://mt0.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}",attr="Google Maps") 
     m.add_child(folium.LatLngPopup()) 
 
     if st.session_state.pickup_coord:
