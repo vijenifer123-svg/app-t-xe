@@ -249,6 +249,10 @@ st.set_page_config(page_title="VHQ 3I FARE", page_icon="🚖", layout="wide")
 # CSS Tùy chỉnh
 st.markdown("""
     <style>
+    /* Chặn tính năng vuốt xuống để tải lại trên điện thoại */
+    body, html {
+        overscroll-behavior-y: contain;
+    }
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
